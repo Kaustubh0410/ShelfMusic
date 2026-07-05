@@ -156,7 +156,8 @@ class MusicRecommender:
     ) -> list[dict]:
         candidates = self._apply_filters(genres, moods, artists, activities, language)
         if len(candidates) == 0:
-            return []
+            # Fallback: Relax strict filters and search across the entire language set
+            candidates = self._apply_filters(None, None, None, None, language)
 
         # Sliders are removed, so we construct target features dynamically from matched filters.
         # Find tracks matching current filters (genres or moods or activities).

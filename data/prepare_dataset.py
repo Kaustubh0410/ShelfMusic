@@ -72,18 +72,55 @@ INDIAN_ARTIST_KEYWORDS = [
 ]
 
 INDIAN_GENRES = [
-    "filmi", "indipop", "sufi", "singles", "devotional", "ghazal", "garba", "bhajan",
-    "bollywood", "desi", "punjabi", "indian", "bengali", "patriotic"
+    "filmi", "indipop", "sufi", "devotional", "ghazal",
+    "garba", "bhajan", "bollywood", "desi", "punjabi", "qawwali",
 ]
 
+INDIAN_ARTISTS_FULL = {
+    "arijit singh", "lata mangeshkar", "kishore kumar", "asha bhosle", "a.r. rahman",
+    "ar rahman", "r.d. burman", "s.d. burman", "sonu nigam", "alka yagnik",
+    "udit narayan", "kumar sanu", "shreya ghoshal", "mohammed rafi", "mohd. rafi",
+    "mukesh", "pritam", "atif aslam", "rahat fateh ali khan", "nusrat fateh ali khan",
+    "jagjit singh", "sunidhi chauhan", "neha kakkar", "jubin nautiyal", "badshah",
+    "honey singh", "yo yo honey singh", "diljit dosanjh", "amit trivedi",
+    "sukhwinder singh", "kailash kher", "shaan", "hariharan", "kavita krishnamurthy",
+    "suresh wadkar", "anuradha paudwal", "sadhana sargam", "pankaj udhas",
+    "anup jalota", "begum akhtar", "vishal-shekhar", "shankar mahadevan",
+    "tanishk bagchi", "javed ali", "sachin-jigar", "salim-sulaiman",
+    "himesh reshammiya", "abhijeet", "wadali brothers", "rekha bhardwaj",
+}
+
 def get_language(artist: str, genre: str) -> str:
-    artist_lower = str(artist).lower()
-    genre_lower = str(genre).lower()
-    if any(g in genre_lower for g in INDIAN_GENRES):
+    a = str(artist).lower().strip()
+    g = str(genre).lower()
+    if any(x in g for x in INDIAN_GENRES):
         return "hindi"
-    if any(a in artist_lower for a in INDIAN_ARTIST_KEYWORDS):
-        return "hindi"
+
+    for part in [p.strip() for p in a.split(",") if p.strip()]:
+        if part in INDIAN_ARTISTS_FULL:
+            return "hindi"
+
     return "english"
+
+def map_hindi_genre(artist: str, energy: float, acousticness: float, valence: float) -> str:
+    artist_lower = str(artist).lower()
+    if any(a in artist_lower for a in ["ghazal", "jagjit", "pankaj", "begum akhtar", "chitra singh"]):
+        return "ghazal"
+    if any(a in artist_lower for a in ["sufi", "rahat fateh", "nusrat", "kailash kher", "wadali"]):
+        return "sufi"
+    if any(a in artist_lower for a in ["lata", "kishore", "mukesh", "rafi", "suresh wadkar", "anuradha"]):
+        if acousticness > 0.6:
+            return "ghazal"
+        return "filmi"
+    if any(a in artist_lower for a in ["badshah", "honey", "diljit", "raftaar"]):
+        return "indipop"
+    if acousticness > 0.7:
+        if valence < 0.4:
+            return "ghazal"
+        return "sufi"
+    if energy > 0.6:
+        return "indipop"
+    return "filmi"
 
 def parse_loudness(val) -> float:
     """'-6.85db' -> -6.85 ; robust to NaN/odd formats."""
@@ -155,8 +192,15 @@ def clean_chunk(df: pd.DataFrame) -> pd.DataFrame:
     df["activities"] = df.apply(activities_for_row, axis=1)
 
     # Language classification.
-    df["language"] = df.apply(lambda r: get_language(r["artist_name"], r["genre"]), axis=1)
+    df["language"] = df.apply(lambda r: get_language(r["artist_name"], r["Genre"]), axis=1)
 
+    # Map Hindi songs to formal Indian genres (filmi, indipop, sufi, ghazal) based on features
+    def map_genre_by_lang(row) -> str:
+        if row["language"] == "hindi":
+            return map_hindi_genre(row["artist_name"], row["energy"], row["acousticness"], row["valence"])
+        return row["genre"]
+
+    df["genre"] = df.apply(map_genre_by_lang, axis=1)
     # Dataset's own precomputed similar songs (kept for a bonus UI feature).
     df["similar_1"] = (df["Similar Artist 1"].astype(str) + " \u2013 " + df["Similar Song 1"].astype(str)).str.strip()
     df["similar_2"] = (df["Similar Artist 2"].astype(str) + " \u2013 " + df["Similar Song 2"].astype(str)).str.strip()
