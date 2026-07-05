@@ -140,19 +140,15 @@ That's it. On first boot the backend waits for PostgreSQL, creates the `tracks`
 table, seeds it from `data/dataset.csv`, and fits the recommender.
 
 Open **http://localhost:3000**.
-
 ## How to use
 
 See **[docs/USAGE.md](docs/USAGE.md)** for a walkthrough with examples. Briefly:
 
-1. **Tune by taste** — drag the sliders (energy, danceability, mood, acoustic,
-   instrumental), optionally pick genres, and hit *Get recommendations*.
-2. **Find similar** — search a track by name or artist, click it, and get its
-   nearest neighbours in audio space.
+1. **Tune by taste** — Tap your favorite selections across **Step 1: Mood**, **Step 2: Genres** (formal, clean title casing), **Step 3: Activities/Vibe**, and **Step 4: Language (Hindi, English, or Mix)**. The system will automatically fetch matching songs instantly.
+2. **Find similar** — search a track by name or artist, click it, and get its nearest neighbours in audio space.
 3. **Popular** — browse the most popular tracks overall or by genre.
 
-Every result card shows a mini equalizer of its audio features and (where
-applicable) a match score.
+Every result card shows a mini equalizer of its audio features, its language badge, and a high-quality song banner dynamically retrieved from the iTunes API.
 
 ## API reference
 
