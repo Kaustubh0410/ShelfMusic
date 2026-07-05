@@ -1,23 +1,14 @@
 """
-Hybrid music recommendation engine.
+ShelfMusic recommendation engine (Kaggle 900K-Spotify edition).
 
-Two complementary strategies are combined:
+Content-based recommender over real Spotify audio features, with faceted
+filtering by mood (emotion), genre, artist, and activity.
 
-1. Content-based filtering
-   Each track is represented by a feature vector built from:
-     - Normalized numeric audio features (danceability, energy, valence,
-       acousticness, instrumentalness, speechiness, liveness, tempo, loudness).
-     - A TF-IDF encoding of the genre label, so genre similarity contributes
-       to the vector space alongside the audio features.
-   Similarity between tracks is cosine similarity over these vectors.
-
-2. Preference-based scoring
-   When a user supplies target preferences (mood/energy sliders + genres),
-   we build a synthetic "taste vector" and rank all tracks against it,
-   blending in popularity so well-known tracks surface for cold starts.
-
-The engine is fit once at startup from a pandas DataFrame and then answers
-queries in-memory.
+Track vectors combine normalized numeric audio features with a TF-IDF
+encoding of genre + emotion, so recommendations respect both how a track
+sounds and its mood. Similarity is computed on demand against the current
+candidate set (after filters), which keeps memory flat even for large
+datasets -- we never materialize a full N x N matrix.
 """
 
 from __future__ import annotations
@@ -35,61 +26,79 @@ NUMERIC_FEATURES = [
     "instrumentalness", "speechiness", "liveness", "tempo", "loudness",
 ]
 
-# Features a user can steer directly via the UI (all on a 0..1 scale).
-STEERABLE_FEATURES = [
-    "danceability", "energy", "valence", "acousticness", "instrumentalness",
-]
+# Features the user steers with sliders (all 0..1).
+STEERABLE = ["danceability", "energy", "valence", "acousticness", "instrumentalness"]
+
+ACTIVITY_LABELS = {
+    "party": "Party", "work_study": "Work/Study", "relaxation": "Relaxation",
+    "exercise": "Exercise", "running": "Running", "yoga": "Yoga",
+    "driving": "Driving", "social": "Social", "morning": "Morning",
+}
 
 
 class MusicRecommender:
     def __init__(self, df: pd.DataFrame):
         self.df = df.reset_index(drop=True).copy()
+
+        # Scale numeric features to 0..1 (tempo/loudness need it; others already are).
         self._scaler = MinMaxScaler()
         self._numeric_scaled = self._scaler.fit_transform(self.df[NUMERIC_FEATURES])
 
-        # TF-IDF over genre so genre overlap contributes to similarity.
-        self._genre_vectorizer = TfidfVectorizer()
-        genre_matrix = self._genre_vectorizer.fit_transform(self.df["genre"]).toarray()
+        # TF-IDF over "genre emotion" so both contribute to similarity.
+        self._tags = (self.df["genre"].fillna("") + " " + self.df["emotion"].fillna("")).str.strip()
+        self._vectorizer = TfidfVectorizer()
+        tag_matrix = self._vectorizer.fit_transform(self._tags).toarray()
 
-        # Weight genre vs audio features. Genre is weighted so same-genre
-        # tracks cluster, but audio features still differentiate within a genre.
-        genre_weight = 1.5
-        self._feature_matrix = np.hstack([
-            self._numeric_scaled,
-            genre_matrix * genre_weight,
-        ])
+        tag_weight = 1.5
+        self._feature_matrix = np.hstack([self._numeric_scaled, tag_matrix * tag_weight])
 
-        # Precompute the full track-track similarity matrix (small dataset).
-        self._similarity = cosine_similarity(self._feature_matrix)
-
-        # Index helpers
         self._id_to_pos = {tid: i for i, tid in enumerate(self.df["track_id"])}
 
     # ------------------------------------------------------------------ #
-    # Metadata helpers
+    # Facet metadata for the UI dropdowns
     # ------------------------------------------------------------------ #
-    def genres(self) -> list[str]:
-        return sorted(self.df["genre"].unique().tolist())
+    def facets(self) -> dict:
+        genres = sorted(g for g in self.df["genre"].dropna().unique() if g)
+        moods = sorted(m for m in self.df["emotion"].dropna().unique() if m and m != "nan")
+        top_artists = self.df["artist_name"].value_counts().head(300).index.tolist()
+        activities = [{"key": k, "label": v} for k, v in ACTIVITY_LABELS.items()]
+        return {
+            "genres": genres,
+            "moods": moods,
+            "artists": sorted(top_artists),
+            "activities": activities,
+            "track_count": int(len(self.df)),
+        }
 
     def track_count(self) -> int:
         return int(len(self.df))
 
+    # ------------------------------------------------------------------ #
+    # Record serialization
+    # ------------------------------------------------------------------ #
     def _rows_to_records(self, idx: Iterable[int], scores: dict[int, float] | None = None) -> list[dict]:
         out = []
         for i in idx:
             row = self.df.iloc[i]
+            acts = [a for a in str(row["activities"]).split(",") if a]
             rec = {
                 "track_id": row["track_id"],
                 "track_name": row["track_name"],
                 "artist_name": row["artist_name"],
                 "genre": row["genre"],
+                "emotion": row["emotion"],
+                "album": row["album"],
+                "release_date": row["release_date"],
+                "explicit": bool(row["explicit"]),
                 "popularity": int(row["popularity"]),
-                "duration_ms": int(row["duration_ms"]),
+                "duration_sec": int(row["duration_sec"]),
+                "tempo": round(float(row["tempo"]), 1),
                 "danceability": round(float(row["danceability"]), 3),
                 "energy": round(float(row["energy"]), 3),
                 "valence": round(float(row["valence"]), 3),
                 "acousticness": round(float(row["acousticness"]), 3),
-                "tempo": round(float(row["tempo"]), 1),
+                "activities": [ACTIVITY_LABELS.get(a, a) for a in acts],
+                "similar_tracks": [row["similar_1"], row["similar_2"], row["similar_3"]],
             }
             if scores is not None:
                 rec["match_score"] = round(float(scores.get(i, 0.0)), 4)
@@ -97,79 +106,89 @@ class MusicRecommender:
         return out
 
     # ------------------------------------------------------------------ #
+    # Faceted filtering -> candidate index positions
+    # ------------------------------------------------------------------ #
+    def _apply_filters(self, genres, moods, artists, activities) -> np.ndarray:
+        mask = np.ones(len(self.df), dtype=bool)
+        if genres:
+            mask &= self.df["genre"].isin([g.lower() for g in genres]).to_numpy()
+        if moods:
+            mask &= self.df["emotion"].isin([m.lower() for m in moods]).to_numpy()
+        if artists:
+            mask &= self.df["artist_name"].isin(artists).to_numpy()
+        if activities:
+            want = set(activities)
+            has_activity = self.df["activities"].apply(
+                lambda s: bool(want & set(str(s).split(",")))
+            ).to_numpy()
+            mask &= has_activity
+        return np.where(mask)[0]
+
+    # ------------------------------------------------------------------ #
     # Search
     # ------------------------------------------------------------------ #
-    def search(self, query: str, limit: int = 20) -> list[dict]:
+    def search(self, query: str, limit: int = 10) -> list[dict]:
         q = query.strip().lower()
         if not q:
             return []
         mask = (
-            self.df["track_name"].str.lower().str.contains(q, regex=False)
-            | self.df["artist_name"].str.lower().str.contains(q, regex=False)
+            self.df["track_name"].str.lower().str.contains(q, regex=False, na=False)
+            | self.df["artist_name"].str.lower().str.contains(q, regex=False, na=False)
         )
         idx = self.df.index[mask][:limit].tolist()
         return self._rows_to_records(idx)
 
     # ------------------------------------------------------------------ #
-    # Similar-track recommendations (content-based, item-item)
+    # Preference + filter recommendations (main flow)
     # ------------------------------------------------------------------ #
-    def similar_to(self, track_id: str, limit: int = 10) -> list[dict]:
-        if track_id not in self._id_to_pos:
-            raise KeyError(track_id)
-        pos = self._id_to_pos[track_id]
-        sims = self._similarity[pos].copy()
-        sims[pos] = -1.0  # exclude the seed track itself
-        top = np.argsort(sims)[::-1][:limit]
-        scores = {int(i): float(sims[i]) for i in top}
-        return self._rows_to_records([int(i) for i in top], scores)
-
-    # ------------------------------------------------------------------ #
-    # Preference-based recommendations (taste vector)
-    # ------------------------------------------------------------------ #
-    def recommend_from_preferences(
+    def recommend(
         self,
         preferences: dict[str, float],
         genres: list[str] | None = None,
+        moods: list[str] | None = None,
+        artists: list[str] | None = None,
+        activities: list[str] | None = None,
         limit: int = 12,
         popularity_weight: float = 0.15,
     ) -> list[dict]:
-        """
-        preferences: dict of steerable feature -> target value in [0,1].
-        genres: optional list of preferred genres (soft filter / boost).
-        """
-        # Build a synthetic target row in the ORIGINAL feature space, then scale.
+        candidates = self._apply_filters(genres, moods, artists, activities)
+        if len(candidates) == 0:
+            return []
+
         target = self.df[NUMERIC_FEATURES].mean().to_dict()
         for feat, val in preferences.items():
             if feat in target:
                 target[feat] = float(val)
-        # tempo/loudness aren't on a 0..1 scale; leave them at dataset mean
-        # unless explicitly steered (UI only steers 0..1 features).
-        target_vec = self._scaler.transform(
-            pd.DataFrame([target])[NUMERIC_FEATURES]
-        )[0]
+        target_vec = self._scaler.transform(pd.DataFrame([target])[NUMERIC_FEATURES])[0]
 
-        # Genre component of the taste vector.
-        if genres:
-            genre_text = " ".join(genres)
-        else:
-            genre_text = " ".join(self.df["genre"].unique())
-        genre_vec = self._genre_vectorizer.transform([genre_text]).toarray()[0] * 1.5
+        tag_text = " ".join((genres or []) + (moods or [])) or " ".join(self._tags.unique()[:50])
+        tag_vec = self._vectorizer.transform([tag_text.lower()]).toarray()[0] * 1.5
+        taste = np.hstack([target_vec, tag_vec]).reshape(1, -1)
 
-        taste_vector = np.hstack([target_vec, genre_vec]).reshape(1, -1)
-        sims = cosine_similarity(taste_vector, self._feature_matrix)[0]
+        cand_matrix = self._feature_matrix[candidates]
+        sims = cosine_similarity(taste, cand_matrix)[0]
 
-        # Blend in normalized popularity.
-        pop = self.df["popularity"].to_numpy() / 100.0
+        pop = self.df.iloc[candidates]["popularity"].to_numpy() / 100.0
         blended = (1 - popularity_weight) * sims + popularity_weight * pop
 
-        # Hard genre preference boost (soft): add small bonus for matching genre.
-        if genres:
-            genre_set = set(genres)
-            bonus = self.df["genre"].isin(genre_set).to_numpy().astype(float) * 0.05
-            blended = blended + bonus
+        order = np.argsort(blended)[::-1][:limit]
+        top_positions = candidates[order]
+        scores = {int(candidates[o]): float(blended[o]) for o in order}
+        return self._rows_to_records([int(p) for p in top_positions], scores)
 
-        top = np.argsort(blended)[::-1][:limit]
-        scores = {int(i): float(blended[i]) for i in top}
+    # ------------------------------------------------------------------ #
+    # Item-item similar tracks
+    # ------------------------------------------------------------------ #
+    def similar_to(self, track_id: str, limit: int = 12) -> list[dict]:
+        if track_id not in self._id_to_pos:
+            raise KeyError(track_id)
+        pos = self._id_to_pos[track_id]
+        sims = cosine_similarity(
+            self._feature_matrix[pos].reshape(1, -1), self._feature_matrix
+        )[0]
+        sims[pos] = -1.0
+        top = np.argsort(sims)[::-1][:limit]
+        scores = {int(i): float(sims[i]) for i in top}
         return self._rows_to_records([int(i) for i in top], scores)
 
     # ------------------------------------------------------------------ #
@@ -178,6 +197,6 @@ class MusicRecommender:
     def popular(self, limit: int = 12, genre: str | None = None) -> list[dict]:
         df = self.df
         if genre:
-            df = df[df["genre"] == genre]
+            df = df[df["genre"] == genre.lower()]
         idx = df.sort_values("popularity", ascending=False).head(limit).index.tolist()
         return self._rows_to_records(idx)

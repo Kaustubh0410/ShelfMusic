@@ -1,19 +1,24 @@
-// Thin typed client for the ShelfMusic backend API.
-// All calls go through the relative /api path, which nginx (prod) or the
-// Vite dev proxy forwards to the backend container.
+// Typed client for the ShelfMusic backend API.
+// All calls go through the relative /api path (nginx proxies to backend).
 
 export interface Track {
   track_id: string;
   track_name: string;
   artist_name: string;
   genre: string;
+  emotion: string;
+  album: string;
+  release_date: string;
+  explicit: boolean;
   popularity: number;
-  duration_ms: number;
+  duration_sec: number;
+  tempo: number;
   danceability: number;
   energy: number;
   valence: number;
   acousticness: number;
-  tempo: number;
+  activities: string[];
+  similar_tracks: string[];
   match_score?: number | null;
 }
 
@@ -25,15 +30,32 @@ export interface Preferences {
   instrumentalness: number;
 }
 
+export interface Activity {
+  key: string;
+  label: string;
+}
+
+export interface Facets {
+  track_count: number;
+  genres: string[];
+  moods: string[];
+  artists: string[];
+  activities: Activity[];
+}
+
 export interface RecommendResponse {
   strategy: string;
   count: number;
   results: Track[];
 }
 
-export interface Meta {
-  track_count: number;
+export interface RecommendPayload {
+  preferences: Preferences;
   genres: string[];
+  moods: string[];
+  artists: string[];
+  activities: string[];
+  limit: number;
 }
 
 const BASE = "/api";
@@ -51,20 +73,20 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  meta: () => req<Meta>("/meta"),
+  facets: () => req<Facets>("/facets"),
 
   search: (q: string) =>
     req<Track[]>(`/search?q=${encodeURIComponent(q)}&limit=8`),
 
+  recommend: (payload: RecommendPayload) =>
+    req<RecommendResponse>("/recommend", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   similar: (trackId: string) =>
     req<RecommendResponse>(`/tracks/${encodeURIComponent(trackId)}/similar?limit=12`),
 
-  recommend: (preferences: Preferences, genres: string[]) =>
-    req<RecommendResponse>("/recommend", {
-      method: "POST",
-      body: JSON.stringify({ preferences, genres, limit: 12 }),
-    }),
-
   popular: (genre?: string) =>
-    req<RecommendResponse>(`/popular?limit=12${genre ? `&genre=${genre}` : ""}`),
+    req<RecommendResponse>(`/popular?limit=12${genre ? `&genre=${encodeURIComponent(genre)}` : ""}`),
 };

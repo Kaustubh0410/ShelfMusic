@@ -1,19 +1,18 @@
 """
-PostgreSQL access layer.
+PostgreSQL access layer (Kaggle 900K-Spotify schema).
 
 Responsibilities:
 - Wait for the database container to be reachable.
 - Create the `tracks` table if it does not exist.
-- Seed the table from the CSV dataset on first startup (idempotent).
+- Seed the table from the prepared CSV on first startup (idempotent).
 - Load all tracks into a pandas DataFrame for the recommender to fit on.
 
 Connection settings come from environment variables so the app is
-configurable via docker-compose. See README for the full list.
+configurable via docker-compose.
 """
 
 from __future__ import annotations
 
-import io
 import os
 import time
 
@@ -40,10 +39,13 @@ def _sqlalchemy_url() -> str:
         f"@{c['host']}:{c['port']}/{c['dbname']}"
     )
 
+
 TABLE_COLUMNS = [
-    "track_id", "track_name", "artist_name", "genre", "popularity",
-    "duration_ms", "danceability", "energy", "valence", "acousticness",
-    "instrumentalness", "speechiness", "liveness", "tempo", "loudness",
+    "track_id", "track_name", "artist_name", "genre", "emotion", "album",
+    "release_date", "explicit", "popularity", "tempo", "loudness",
+    "duration_sec", "energy", "danceability", "valence", "speechiness",
+    "liveness", "acousticness", "instrumentalness", "activities",
+    "similar_1", "similar_2", "similar_3",
 ]
 
 CREATE_TABLE_SQL = """
@@ -52,17 +54,25 @@ CREATE TABLE IF NOT EXISTS tracks (
     track_name       TEXT NOT NULL,
     artist_name      TEXT NOT NULL,
     genre            TEXT NOT NULL,
-    popularity       INTEGER NOT NULL,
-    duration_ms      INTEGER NOT NULL,
-    danceability     DOUBLE PRECISION NOT NULL,
-    energy           DOUBLE PRECISION NOT NULL,
-    valence          DOUBLE PRECISION NOT NULL,
-    acousticness     DOUBLE PRECISION NOT NULL,
-    instrumentalness DOUBLE PRECISION NOT NULL,
-    speechiness      DOUBLE PRECISION NOT NULL,
-    liveness         DOUBLE PRECISION NOT NULL,
-    tempo            DOUBLE PRECISION NOT NULL,
-    loudness         DOUBLE PRECISION NOT NULL
+    emotion          TEXT,
+    album            TEXT,
+    release_date     TEXT,
+    explicit         BOOLEAN,
+    popularity       INTEGER,
+    tempo            DOUBLE PRECISION,
+    loudness         DOUBLE PRECISION,
+    duration_sec     INTEGER,
+    energy           DOUBLE PRECISION,
+    danceability     DOUBLE PRECISION,
+    valence          DOUBLE PRECISION,
+    speechiness      DOUBLE PRECISION,
+    liveness         DOUBLE PRECISION,
+    acousticness     DOUBLE PRECISION,
+    instrumentalness DOUBLE PRECISION,
+    activities       TEXT,
+    similar_1        TEXT,
+    similar_2        TEXT,
+    similar_3        TEXT
 );
 """
 
@@ -75,7 +85,7 @@ def _connect(retries: int = 30, delay: float = 2.0) -> psycopg2.extensions.conne
             conn = psycopg2.connect(**DB_CONFIG)
             conn.autocommit = True
             return conn
-        except psycopg2.OperationalError as err:  # DB not ready yet
+        except psycopg2.OperationalError as err:
             last_err = err
             print(f"[database] DB not ready (attempt {attempt}/{retries}): {err}")
             time.sleep(delay)
@@ -93,11 +103,16 @@ def _seed_if_empty(conn: psycopg2.extensions.connection) -> None:
         if not os.path.exists(DATASET_PATH):
             raise FileNotFoundError(
                 f"Dataset not found at {DATASET_PATH}. "
-                "Run data/generate_dataset.py or mount the dataset volume."
+                "Run data/prepare_dataset.py to build it from the Kaggle file."
             )
 
         df = pd.read_csv(DATASET_PATH)
+        # Ensure all expected columns exist.
+        for col in TABLE_COLUMNS:
+            if col not in df.columns:
+                df[col] = None
         df = df[TABLE_COLUMNS]
+        df = df.where(pd.notna(df), None)
         rows = list(df.itertuples(index=False, name=None))
         execute_values(
             cur,

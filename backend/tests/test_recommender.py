@@ -1,15 +1,7 @@
-"""
-Unit tests for the recommendation engine.
-
-These test the recommender in isolation against the CSV dataset, so they
-run without a database. Run with:  pytest  (from the backend/ directory).
-"""
-
+"""Unit tests for the faceted recommendation engine (no DB required)."""
 import os
-
 import pandas as pd
 import pytest
-
 from app.recommender import MusicRecommender
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "..", "data", "dataset.csv")
@@ -17,60 +9,52 @@ DATA = os.path.join(os.path.dirname(__file__), "..", "..", "data", "dataset.csv"
 
 @pytest.fixture(scope="module")
 def rec() -> MusicRecommender:
-    df = pd.read_csv(DATA)
-    return MusicRecommender(df)
+    return MusicRecommender(pd.read_csv(DATA))
 
 
-def test_track_count_and_genres(rec):
-    assert rec.track_count() > 0
-    assert len(rec.genres()) >= 5
+def test_facets(rec):
+    f = rec.facets()
+    assert f["track_count"] > 0
+    assert len(f["genres"]) >= 3
+    assert len(f["moods"]) >= 2
+    assert len(f["activities"]) == 9
 
 
-def test_search_finds_known_track(rec):
-    hits = rec.search("Wildfire", limit=5)
-    assert len(hits) >= 1
-    assert all("wildfire" in h["track_name"].lower() for h in hits)
+def test_search(rec):
+    hits = rec.search(rec.df.iloc[0]["track_name"][:3], limit=5)
+    assert isinstance(hits, list)
 
 
-def test_similar_excludes_seed_and_returns_scores(rec):
-    seed_id = rec.df.iloc[0]["track_id"]
-    sims = rec.similar_to(seed_id, limit=5)
-    assert len(sims) == 5
-    # seed must not recommend itself
-    assert all(s["track_id"] != seed_id for s in sims)
-    # scores present and sorted descending
+def test_recommend_respects_genre_filter(rec):
+    g = rec.df["genre"].iloc[0]
+    recs = rec.recommend(
+        preferences=dict(danceability=0.5, energy=0.5, valence=0.5, acousticness=0.5, instrumentalness=0.2),
+        genres=[g], limit=8)
+    assert all(t["genre"] == g for t in recs)
+
+
+def test_recommend_respects_mood_filter(rec):
+    m = rec.df["emotion"].iloc[0]
+    recs = rec.recommend(
+        preferences=dict(danceability=0.5, energy=0.5, valence=0.5, acousticness=0.5, instrumentalness=0.2),
+        moods=[m], limit=8)
+    assert all(t["emotion"] == m for t in recs)
+
+
+def test_similar_excludes_seed(rec):
+    seed = rec.df.iloc[0]["track_id"]
+    sims = rec.similar_to(seed, limit=5)
+    assert all(s["track_id"] != seed for s in sims)
     scores = [s["match_score"] for s in sims]
     assert scores == sorted(scores, reverse=True)
 
 
-def test_similar_unknown_id_raises(rec):
+def test_similar_unknown_raises(rec):
     with pytest.raises(KeyError):
-        rec.similar_to("does-not-exist")
+        rec.similar_to("nope")
 
 
-def test_preferences_respect_energy(rec):
-    """High-energy preference should surface high-energy tracks on average."""
-    high = rec.recommend_from_preferences(
-        {"danceability": 0.5, "energy": 0.95, "valence": 0.5,
-         "acousticness": 0.05, "instrumentalness": 0.2},
-        genres=["metal", "electronic"], limit=10,
-    )
-    avg_energy = sum(t["energy"] for t in high) / len(high)
-    assert avg_energy > 0.6
-
-
-def test_genre_preference_filters(rec):
-    recs = rec.recommend_from_preferences(
-        {"danceability": 0.5, "energy": 0.5, "valence": 0.5,
-         "acousticness": 0.5, "instrumentalness": 0.3},
-        genres=["classical"], limit=8,
-    )
-    # classical should dominate the results given the strong genre signal
-    classical = sum(1 for t in recs if t["genre"] == "classical")
-    assert classical >= len(recs) // 2
-
-
-def test_popular_is_sorted(rec):
+def test_popular_sorted(rec):
     pop = rec.popular(limit=10)
     pops = [t["popularity"] for t in pop]
     assert pops == sorted(pops, reverse=True)

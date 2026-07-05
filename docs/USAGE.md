@@ -1,6 +1,6 @@
 # Usage Guide
 
-Open **http://localhost:8080** after `docker-compose up --build`.
+Open **http://localhost:3000** after `docker-compose up --build`.
 
 The app has three modes, selectable from the tabs at the top.
 

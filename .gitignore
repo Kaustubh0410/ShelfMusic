@@ -19,3 +19,12 @@ frontend/dist/
 *.swp
 .idea/
 .vscode/
+
+# Raw Kaggle dataset (large — never commit; use prepare_dataset.py)
+data/spotify_dataset.csv
+data/*.json
+data/dataset_new_sample.csv
+
+# Build info
+*.tsbuildinfo
+

@@ -53,8 +53,8 @@ What happens on first boot:
 
 When you see `Application startup complete`, open:
 
-- App: **http://localhost:8080**
-- API docs (Swagger): **http://localhost:8000/docs**
+- App: **http://localhost:3000**
+- API docs (Swagger): **http://localhost:8010/docs**
 
 ## 4. Stop / reset
 
@@ -70,7 +70,7 @@ docker-compose down -v
 
 ```bash
 cd data
-python generate_dataset.py     # requires: pip install pandas numpy
+python prepare_dataset.py     # requires: pip install pandas numpy
 ```
 
 ## Using the real Kaggle dataset (optional)
@@ -85,7 +85,7 @@ docker-compose down -v && docker-compose up --build
 ## Troubleshooting
 
 - **Port already in use** — edit the `ports:` mappings in `docker-compose.yml`
-  (e.g. change `8080:80` to `3000:80`).
+  (e.g. change `3000:80` to `3000:80`).
 - **Backend can't reach the DB** — the backend retries for ~60s on startup;
   if it still fails, run `docker-compose down -v` and try again.
 - **Stale data after swapping the CSV** — the table only seeds when empty, so
