@@ -97,6 +97,7 @@ class MusicRecommender:
                 "energy": round(float(row["energy"]), 3),
                 "valence": round(float(row["valence"]), 3),
                 "acousticness": round(float(row["acousticness"]), 3),
+                "language": str(row["language"]) if "language" in row else "english",
                 "activities": [ACTIVITY_LABELS.get(a, a) for a in acts],
                 "similar_tracks": [row["similar_1"], row["similar_2"], row["similar_3"]],
             }
@@ -107,8 +108,7 @@ class MusicRecommender:
 
     # ------------------------------------------------------------------ #
     # Faceted filtering -> candidate index positions
-    # ------------------------------------------------------------------ #
-    def _apply_filters(self, genres, moods, artists, activities) -> np.ndarray:
+    def _apply_filters(self, genres, moods, artists, activities, language: str = "mix") -> np.ndarray:
         mask = np.ones(len(self.df), dtype=bool)
         if genres:
             mask &= self.df["genre"].isin([g.lower() for g in genres]).to_numpy()
@@ -122,6 +122,8 @@ class MusicRecommender:
                 lambda s: bool(want & set(str(s).split(",")))
             ).to_numpy()
             mask &= has_activity
+        if language and language != "mix" and "language" in self.df.columns:
+            mask &= (self.df["language"] == language.lower()).to_numpy()
         return np.where(mask)[0]
 
     # ------------------------------------------------------------------ #
@@ -143,22 +145,45 @@ class MusicRecommender:
     # ------------------------------------------------------------------ #
     def recommend(
         self,
-        preferences: dict[str, float],
+        preferences: dict[str, float] | None = None,
         genres: list[str] | None = None,
         moods: list[str] | None = None,
         artists: list[str] | None = None,
         activities: list[str] | None = None,
-        limit: int = 12,
+        language: str = "mix",
+        limit: int = 24,
         popularity_weight: float = 0.15,
     ) -> list[dict]:
-        candidates = self._apply_filters(genres, moods, artists, activities)
+        candidates = self._apply_filters(genres, moods, artists, activities, language)
         if len(candidates) == 0:
             return []
 
-        target = self.df[NUMERIC_FEATURES].mean().to_dict()
-        for feat, val in preferences.items():
-            if feat in target:
-                target[feat] = float(val)
+        # Sliders are removed, so we construct target features dynamically from matched filters.
+        # Find tracks matching current filters (genres or moods or activities).
+        filter_mask = np.zeros(len(self.df), dtype=bool)
+        has_any_filter = False
+        if genres:
+            filter_mask |= self.df["genre"].isin([g.lower() for g in genres]).to_numpy()
+            has_any_filter = True
+        if moods:
+            filter_mask |= self.df["emotion"].isin([m.lower() for m in moods]).to_numpy()
+            has_any_filter = True
+        if activities:
+            want = set(activities)
+            has_activity = self.df["activities"].apply(
+                lambda s: bool(want & set(str(s).split(",")))
+            ).to_numpy()
+            filter_mask |= has_activity
+            has_any_filter = True
+
+        matched_indices = np.where(filter_mask)[0]
+        if has_any_filter and len(matched_indices) > 0:
+            # Use mean features of matching tracks as taste baseline
+            target = self.df.iloc[matched_indices][NUMERIC_FEATURES].mean().to_dict()
+        else:
+            # Fallback to dataset mean
+            target = self.df[NUMERIC_FEATURES].mean().to_dict()
+
         target_vec = self._scaler.transform(pd.DataFrame([target])[NUMERIC_FEATURES])[0]
 
         tag_text = " ".join((genres or []) + (moods or [])) or " ".join(self._tags.unique()[:50])

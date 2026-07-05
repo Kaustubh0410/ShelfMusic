@@ -89,11 +89,12 @@ def search(
 def recommend(req: RecommendRequest) -> RecommendResponse:
     rec = _engine()
     results = rec.recommend(
-        preferences=req.preferences.model_dump(),
+        preferences=req.preferences.model_dump() if req.preferences else None,
         genres=req.genres,
         moods=req.moods,
         artists=req.artists,
         activities=req.activities,
+        language=req.language,
         limit=req.limit,
     )
     return RecommendResponse(
@@ -101,6 +102,7 @@ def recommend(req: RecommendRequest) -> RecommendResponse:
         count=len(results),
         results=[Track(**r) for r in results],
     )
+
 
 
 @app.get("/api/tracks/{track_id}/similar", response_model=RecommendResponse)

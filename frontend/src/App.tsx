@@ -1,25 +1,54 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api";
-import type { Facets, Preferences, Track, RecommendPayload } from "./api";
-import { MultiSelect } from "./MultiSelect";
+import type { Facets, Track, RecommendPayload } from "./api";
 import { AlbumCover } from "./AlbumCover";
 import { TrackModal } from "./TrackModal";
 import { FeatureEqualizer } from "./FeatureEqualizer";
 
-const DEFAULT_PREFS: Preferences = {
-  danceability: 0.6,
-  energy: 0.6,
-  valence: 0.5,
-  acousticness: 0.3,
-  instrumentalness: 0.2,
+const MOOD_CARDS: Record<string, { label: string; emoji: string; desc: string }> = {
+  joy: { label: "Joy", emoji: "☀️", desc: "Upbeat, happy, and bright vibes" },
+  sadness: { label: "Sadness", emoji: "🌧️", desc: "Melancholic, deep, and emotional" },
+  love: { label: "Love", emoji: "💖", desc: "Romantic, warm, and sentimental" },
+  anger: { label: "Anger", emoji: "🔥", desc: "Intense, aggressive, and powerful" },
+  fear: { label: "Fear", emoji: "👻", desc: "Spooky, mysterious, and tense" },
+  surprise: { label: "Surprise", emoji: "⚡", desc: "Energetic, dynamic, and unexpected" },
 };
 
-const SLIDERS: { key: keyof Preferences; label: string }[] = [
-  { key: "energy", label: "Energy" },
-  { key: "danceability", label: "Danceability" },
-  { key: "valence", label: "Mood / positivity" },
-  { key: "acousticness", label: "Acoustic feel" },
-  { key: "instrumentalness", label: "Instrumental" },
+const POPULAR_GENRES = [
+  { key: "pop", label: "Pop", emoji: "🎤" },
+  { key: "rock", label: "Rock", emoji: "🎸" },
+  { key: "hip hop", label: "Hip Hop", emoji: "🎧" },
+  { key: "jazz", label: "Jazz", emoji: "🎷" },
+  { key: "classical", label: "Classical", emoji: "🎻" },
+  { key: "metal", label: "Metal", emoji: "💀" },
+  { key: "country", label: "Country", emoji: "🤠" },
+  { key: "r&b", label: "R&B", emoji: "🍷" },
+  { key: "electronic", label: "Electronic", emoji: "🎹" },
+  { key: "reggae", label: "Reggae", emoji: "🌴" },
+  { key: "indie", label: "Indie", emoji: "🍀" },
+  { key: "folk", label: "Folk", emoji: "🪕" },
+  { key: "filmi", label: "Filmi / Bollywood", emoji: "🎬" },
+  { key: "indipop", label: "Indipop", emoji: "📻" },
+  { key: "sufi", label: "Sufi", emoji: "✨" },
+  { key: "ghazal", label: "Ghazal", emoji: "🥀" },
+];
+
+const VIBE_CARDS: Record<string, { label: string; emoji: string }> = {
+  party: { label: "Party", emoji: "🎉" },
+  work_study: { label: "Work & Study", emoji: "📚" },
+  relaxation: { label: "Relaxation", emoji: "🧘" },
+  exercise: { label: "Exercise", emoji: "💪" },
+  running: { label: "Running", emoji: "🏃" },
+  yoga: { label: "Yoga & Stretch", emoji: "🧘‍♀️" },
+  driving: { label: "Driving", emoji: "🚗" },
+  social: { label: "Social", emoji: "👥" },
+  morning: { label: "Morning", emoji: "🌅" },
+};
+
+const LANGUAGE_CARDS = [
+  { key: "mix", label: "Mix Vibes", emoji: "🌎", desc: "Blended Hindi & English" },
+  { key: "hindi", label: "Hindi / Bollywood", emoji: "🇮🇳", desc: "Desi hits, ghazals, and sufi" },
+  { key: "english", label: "English / International", emoji: "🇬🇧", desc: "Pop, Rock, Hip Hop, and Metal" },
 ];
 
 function Spinner() {
@@ -42,12 +71,12 @@ type Mode = "taste" | "similar" | "popular";
 export default function App() {
   const [mode, setMode] = useState<Mode>("taste");
   const [facets, setFacets] = useState<Facets | null>(null);
-  const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS);
 
   const [genres, setGenres] = useState<string[]>([]);
   const [moods, setMoods] = useState<string[]>([]);
-  const [artists, setArtists] = useState<string[]>([]);
+  const artists: string[] = [];
   const [activities, setActivities] = useState<string[]>([]);
+  const [language, setLanguage] = useState<string>("mix");
 
   // Find similar states
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,18 +121,25 @@ export default function App() {
     }
   }, [mode, selectedPopularGenre]);
 
+  // Auto-run recommendations when taste filters change
+  useEffect(() => {
+    if (mode === "taste") {
+      runRecommend();
+    }
+  }, [moods, genres, activities, language, mode]);
+
   async function runRecommend() {
     setLoading(true);
     setError(null);
     setHeading("Tuned to your taste");
     try {
       const payload: RecommendPayload = {
-        preferences: prefs,
         genres,
         moods,
         artists,
         activities,
-        limit: 12,
+        language,
+        limit: 24,
       };
       const r = await api.recommend(payload);
       setResults(r.results);
@@ -146,28 +182,6 @@ export default function App() {
       setLoading(false);
     }
   }
-
-  const activityOptions = useMemo(
-    () => (facets?.activities ?? []).map((a) => a.label),
-    [facets]
-  );
-  
-  // Map activity label back to key for the API.
-  const labelToKey = useMemo(() => {
-    const m: Record<string, string> = {};
-    (facets?.activities ?? []).forEach((a) => (m[a.label] = a.key));
-    return m;
-  }, [facets]);
-
-  function setActivityLabels(labels: string[]) {
-    setActivities(labels.map((l) => labelToKey[l] ?? l));
-  }
-  
-  const selectedActivityLabels = useMemo(() => {
-    const keyToLabel: Record<string, string> = {};
-    (facets?.activities ?? []).forEach((a) => (keyToLabel[a.key] = a.label));
-    return activities.map((k) => keyToLabel[k] ?? k);
-  }, [activities, facets]);
 
   const handleTabChange = (newMode: Mode) => {
     setMode(newMode);
@@ -229,35 +243,105 @@ export default function App() {
 
       {mode === "taste" && (
         <section className="panel">
-          <h2>Find your next listen</h2>
-          <p className="hint">Pick any filters (all optional), shape the sound with the sliders, then get matches.</p>
-
-          {facets && (
-            <div className="filters">
-              <MultiSelect label="Mood" options={facets.moods} selected={moods} onChange={setMoods} />
-              <MultiSelect label="Genre" options={facets.genres} selected={genres} onChange={setGenres} searchable />
-              <MultiSelect label="Artist" options={facets.artists} selected={artists} onChange={setArtists} searchable />
-              <MultiSelect label="Good for" options={activityOptions} selected={selectedActivityLabels} onChange={setActivityLabels} />
-            </div>
-          )}
-
-          <div className="sliders">
-            {SLIDERS.map(({ key, label }) => (
-              <div className="slider-row" key={key}>
-                <label htmlFor={key}>{label}</label>
-                <input
-                  id={key} type="range" min={0} max={1} step={0.01}
-                  value={prefs[key]}
-                  onChange={(e) => setPrefs((p) => ({ ...p, [key]: parseFloat(e.target.value) }))}
-                />
-                <span className="val">{prefs[key].toFixed(2)}</span>
-              </div>
-            ))}
+          <div className="step-header">
+            <span className="step-num">Step 1</span>
+            <h2>Select your Moods</h2>
+          </div>
+          <p className="hint">Choose how you want to feel. Tap multiple moods to combine vibes.</p>
+          <div className="card-grid">
+            {Object.entries(MOOD_CARDS).map(([key, item]) => {
+              const isSelected = moods.includes(key);
+              return (
+                <button
+                  key={key}
+                  className={`choice-card ${isSelected ? 'selected' : ''}`}
+                  onClick={() => {
+                    setMoods(prev => prev.includes(key) ? prev.filter(m => m !== key) : [...prev, key]);
+                  }}
+                  aria-pressed={isSelected}
+                >
+                  <div className="choice-emoji">{item.emoji}</div>
+                  <div className="choice-label">{item.label}</div>
+                  <div className="choice-desc">{item.desc}</div>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="btn-row">
+          <div className="step-header" style={{ marginTop: 32 }}>
+            <span className="step-num">Step 2</span>
+            <h2>Select Genres</h2>
+          </div>
+          <p className="hint">Pick genres (keep it formal, or select a mix).</p>
+          <div className="card-grid genre-grid">
+            {POPULAR_GENRES.map((item) => {
+              const isSelected = genres.includes(item.key);
+              return (
+                <button
+                  key={item.key}
+                  className={`choice-card compact ${isSelected ? 'selected' : ''}`}
+                  onClick={() => {
+                    setGenres(prev => prev.includes(item.key) ? prev.filter(g => g !== item.key) : [...prev, item.key]);
+                  }}
+                  aria-pressed={isSelected}
+                >
+                  <span className="choice-emoji">{item.emoji}</span>
+                  <span className="choice-label">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="step-header" style={{ marginTop: 32 }}>
+            <span className="step-num">Step 3</span>
+            <h2>Vibe / Activities</h2>
+          </div>
+          <p className="hint">Match music to what you are doing right now.</p>
+          <div className="card-grid activity-grid">
+            {Object.entries(VIBE_CARDS).map(([key, item]) => {
+              const isSelected = activities.includes(key);
+              return (
+                <button
+                  key={key}
+                  className={`choice-card compact ${isSelected ? 'selected' : ''}`}
+                  onClick={() => {
+                    setActivities(prev => prev.includes(key) ? prev.filter(a => a !== key) : [...prev, key]);
+                  }}
+                  aria-pressed={isSelected}
+                >
+                  <span className="choice-emoji">{item.emoji}</span>
+                  <span className="choice-label">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="step-header" style={{ marginTop: 32 }}>
+            <span className="step-num">Step 4</span>
+            <h2>Select Language Mix</h2>
+          </div>
+          <p className="hint">Blended Hindi & English results matching your vibe.</p>
+          <div className="card-grid language-grid">
+            {LANGUAGE_CARDS.map((item) => {
+              const isSelected = language === item.key;
+              return (
+                <button
+                  key={item.key}
+                  className={`choice-card lang-card ${isSelected ? 'selected' : ''}`}
+                  onClick={() => setLanguage(item.key)}
+                  aria-pressed={isSelected}
+                >
+                  <div className="choice-emoji">{item.emoji}</div>
+                  <div className="choice-label">{item.label}</div>
+                  <div className="choice-desc">{item.desc}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="btn-row" style={{ marginTop: 32 }}>
             <button className="btn" onClick={runRecommend} disabled={loading}>
-              {loading ? "Mixing…" : "Get recommendations"}
+              {loading ? "Mixing…" : "Refresh recommendations"}
             </button>
             {loading && <Spinner />}
           </div>
@@ -344,7 +428,7 @@ export default function App() {
           ) : results.length === 0 ? (
             <div className="state">
               <div className="big">No tracks match those filters.</div>
-              Try removing a filter or widening the sliders.
+              Try changing your steps or selections.
             </div>
           ) : (
             <div className="grid">
@@ -361,7 +445,7 @@ export default function App() {
                     }
                   }}
                 >
-                  <AlbumCover track={t} size={200} />
+                  <AlbumCover track={t} size={240} />
                   <div className="card-body">
                     <div className="row">
                       <span className="genre-tag">{t.genre}</span>
@@ -371,7 +455,10 @@ export default function App() {
                     </div>
                     <div className="title">{t.track_name}</div>
                     <div className="artist">{t.artist_name}</div>
-                    <div className="card-mood">{t.emotion}</div>
+                    <div className="card-mood">
+                      <span className="language-badge">{t.language === "hindi" ? "🇮🇳 Hindi" : "🇬🇧 English"}</span>
+                      {t.emotion}
+                    </div>
                     
                     <FeatureEqualizer track={t} />
 
@@ -400,7 +487,7 @@ export default function App() {
           {mode === "taste" && (
             <>
               <div className="big">Ready when you are.</div>
-              Set filters and hit “Get recommendations”.
+              Tap your moods or language above to see results.
             </>
           )}
           {mode === "similar" && (
@@ -422,8 +509,8 @@ export default function App() {
       )}
 
       <footer className="foot">
-        <span>ShelfMusic · faceted content-based recommender</span>
-        <span>data: Kaggle 900K-Spotify (sampled)</span>
+        <span>ShelfMusic · card-based hybrid music recommender</span>
+        <span>data: Kaggle 900K-Spotify (Hindi/English mix sampled)</span>
       </footer>
     </div>
   );

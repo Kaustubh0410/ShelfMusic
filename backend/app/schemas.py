@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
-
-
 class Track(BaseModel):
     """A single track returned to the frontend."""
 
@@ -23,6 +21,7 @@ class Track(BaseModel):
     energy: float
     valence: float
     acousticness: float
+    language: str
     activities: list[str] = Field(default_factory=list)
     similar_tracks: list[str] = Field(default_factory=list)
     match_score: float | None = None
@@ -46,7 +45,8 @@ class RecommendRequest(BaseModel):
     moods: list[str] = Field(default_factory=list)
     artists: list[str] = Field(default_factory=list)
     activities: list[str] = Field(default_factory=list)
-    limit: int = Field(12, ge=1, le=50)
+    language: str = Field("mix", description="Filter by language: hindi, english, or mix")
+    limit: int = Field(24, ge=1, le=100)
 
 
 class RecommendResponse(BaseModel):

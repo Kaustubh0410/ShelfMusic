@@ -1,6 +1,5 @@
 // Typed client for the ShelfMusic backend API.
 // All calls go through the relative /api path (nginx proxies to backend).
-
 export interface Track {
   track_id: string;
   track_name: string;
@@ -17,6 +16,7 @@ export interface Track {
   energy: number;
   valence: number;
   acousticness: number;
+  language: string;
   activities: string[];
   similar_tracks: string[];
   match_score?: number | null;
@@ -50,11 +50,12 @@ export interface RecommendResponse {
 }
 
 export interface RecommendPayload {
-  preferences: Preferences;
+  preferences?: Preferences;
   genres: string[];
   moods: string[];
   artists: string[];
   activities: string[];
+  language: string;
   limit: number;
 }
 

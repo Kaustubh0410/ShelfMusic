@@ -38,13 +38,11 @@ def _sqlalchemy_url() -> str:
         f"postgresql+psycopg2://{c['user']}:{c['password']}"
         f"@{c['host']}:{c['port']}/{c['dbname']}"
     )
-
-
 TABLE_COLUMNS = [
     "track_id", "track_name", "artist_name", "genre", "emotion", "album",
     "release_date", "explicit", "popularity", "tempo", "loudness",
     "duration_sec", "energy", "danceability", "valence", "speechiness",
-    "liveness", "acousticness", "instrumentalness", "activities",
+    "liveness", "acousticness", "instrumentalness", "activities", "language",
     "similar_1", "similar_2", "similar_3",
 ]
 
@@ -70,11 +68,13 @@ CREATE TABLE IF NOT EXISTS tracks (
     acousticness     DOUBLE PRECISION,
     instrumentalness DOUBLE PRECISION,
     activities       TEXT,
+    language         TEXT,
     similar_1        TEXT,
     similar_2        TEXT,
     similar_3        TEXT
 );
 """
+
 
 
 def _connect(retries: int = 30, delay: float = 2.0) -> psycopg2.extensions.connection:

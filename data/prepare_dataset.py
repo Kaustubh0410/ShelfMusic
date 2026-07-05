@@ -61,6 +61,29 @@ ACTIVITY_COLS = {
     "Good for Morning Routine": "morning",
 }
 
+INDIAN_ARTIST_KEYWORDS = [
+    "arijit", "lata", "kishore", "pritam", "rahman", "alka", "udit", "shreya", "sonu", "asha",
+    "mukesh", "burman", "sanu", "chauhan", "mohit", "badshah", "diljit", "honey", "trivedi",
+    "jubin", "neha", "kakkar", "atif", "aslam", "darshan", "raval", "vishal", "shekhar",
+    "sachin", "jigar", "tanishk", "bagchi", "rafi", "sukhwinder", "kher", "shaan", "kk",
+    "mahadevan", "hariharan", "krishnamurthy", "sargam", "wadkar", "paudwal", "balasubrahmanyam",
+    "chithra", "ehsaan", "loy", "dadlani", "ravjiani", "sajid", "wajid", "reshammiya", "malik",
+    "jatin", "lalit", "fateh", "ali", "khan", "bhajan", "ghazal", "qawwali"
+]
+
+INDIAN_GENRES = [
+    "filmi", "indipop", "sufi", "singles", "devotional", "ghazal", "garba", "bhajan",
+    "bollywood", "desi", "punjabi", "indian", "bengali", "patriotic"
+]
+
+def get_language(artist: str, genre: str) -> str:
+    artist_lower = str(artist).lower()
+    genre_lower = str(genre).lower()
+    if any(g in genre_lower for g in INDIAN_GENRES):
+        return "hindi"
+    if any(a in artist_lower for a in INDIAN_ARTIST_KEYWORDS):
+        return "hindi"
+    return "english"
 
 def parse_loudness(val) -> float:
     """'-6.85db' -> -6.85 ; robust to NaN/odd formats."""
@@ -131,6 +154,9 @@ def clean_chunk(df: pd.DataFrame) -> pd.DataFrame:
 
     df["activities"] = df.apply(activities_for_row, axis=1)
 
+    # Language classification.
+    df["language"] = df.apply(lambda r: get_language(r["artist_name"], r["genre"]), axis=1)
+
     # Dataset's own precomputed similar songs (kept for a bonus UI feature).
     df["similar_1"] = (df["Similar Artist 1"].astype(str) + " \u2013 " + df["Similar Song 1"].astype(str)).str.strip()
     df["similar_2"] = (df["Similar Artist 2"].astype(str) + " \u2013 " + df["Similar Song 2"].astype(str)).str.strip()
@@ -140,7 +166,7 @@ def clean_chunk(df: pd.DataFrame) -> pd.DataFrame:
         "track_name", "artist_name", "genre", "emotion", "album", "release_date",
         "explicit", "popularity", "tempo", "loudness", "duration_sec",
         "energy", "danceability", "valence", "speechiness", "liveness",
-        "acousticness", "instrumentalness", "activities",
+        "acousticness", "instrumentalness", "activities", "language",
         "similar_1", "similar_2", "similar_3",
     ]
     return df[keep]
@@ -177,16 +203,22 @@ def main():
     # Drop exact duplicate songs (same title + artist).
     df = df.drop_duplicates(subset=["track_name", "artist_name"]).reset_index(drop=True)
     print(f"[prep] after de-dup: {len(df):,}")
+    # Stratified sample of English tracks, while keeping ALL Hindi/Indian tracks
+    df_hindi = df[df["language"] == "hindi"]
+    df_english = df[df["language"] == "english"]
+    print(f"[prep] split: {len(df_hindi):,} Hindi tracks, {len(df_english):,} English tracks")
 
-    # Stratified sample by genre so no genre is lost.
-    if len(df) > args.sample:
-        frac = args.sample / len(df)
-        df = (df.groupby("genre", group_keys=False)
-                .apply(lambda g: g.sample(max(1, int(len(g) * frac)), random_state=42)))
-        df = df.reset_index(drop=True)
-    print(f"[prep] sampled rows: {len(df):,} across {df['genre'].nunique()} genres")
+    sample_english_size = args.sample
+    if len(df_english) > sample_english_size:
+        frac = sample_english_size / len(df_english)
+        df_english_sampled = (df_english.groupby("genre", group_keys=False)
+                              .apply(lambda g: g.sample(max(1, int(len(g) * frac)), random_state=42)))
+    else:
+        df_english_sampled = df_english
 
-    # Stable track_id.
+    df = pd.concat([df_hindi, df_english_sampled], ignore_index=True)
+    df = df.sample(frac=1.0, random_state=42).reset_index(drop=True)
+    print(f"[prep] final blended dataset: {len(df):,} rows ({len(df_hindi):,} Hindi + {len(df_english_sampled):,} English) across {df['genre'].nunique()} genres")    # Stable track_id.
     df.insert(0, "track_id", [f"trk_{i:06d}" for i in range(1, len(df) + 1)])
 
     df.to_csv(args.output, index=False)
