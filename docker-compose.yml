@@ -1,0 +1,72 @@
+# ShelfMusic — full stack orchestration.
+# Three services, each in its own container, communicating over a custom
+# bridge network (`shelfnet`). Run everything with: docker-compose up --build
+#
+# Ports exposed to the host:
+#   frontend  -> http://localhost:8080
+#   backend   -> http://localhost:8000  (also proxied at /api via frontend)
+#   db        -> localhost:5432          (for inspection; optional)
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: shelfmusic-db
+    environment:
+      POSTGRES_DB: shelfmusic
+      POSTGRES_USER: shelfmusic
+      POSTGRES_PASSWORD: shelfmusic
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - shelfnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shelfmusic -d shelfmusic"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    container_name: shelfmusic-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: shelfmusic
+      POSTGRES_USER: shelfmusic
+      POSTGRES_PASSWORD: shelfmusic
+      DATASET_PATH: /data/dataset.csv
+    volumes:
+      # Mount the dataset read-only so the backend can seed the DB on first run.
+      - ./data:/data:ro
+    networks:
+      - shelfnet
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    container_name: shelfmusic-frontend
+    depends_on:
+      - backend
+    networks:
+      - shelfnet
+    ports:
+      - "8080:80"
+
+networks:
+  shelfnet:
+    driver: bridge
+
+volumes:
+  db_data:
