@@ -150,9 +150,9 @@ Open **http://localhost:3000**.
 
 See **[docs/USAGE.md](docs/USAGE.md)** for a walkthrough with examples. Briefly:
 
-1. **Tune by taste** — Tap your favorite selections across **Step 1: Mood**, **Step 2: Genres** (formal, clean title casing), **Step 3: Activities/Vibe**, and **Step 4: Language (Hindi, English, or Mix)**. The system will automatically fetch matching songs instantly.
-2. **Find similar** — search a track by name or artist, click it, and get its nearest neighbours in audio space.
-3. **Popular** — browse the most popular tracks overall or by genre.
+1. **Tune by taste** — Tap your favorite selections across **Step 1: Mood**, **Step 2: Genres** (formal, clean title casing), **Step 3: Activities/Vibe**, and **Step 4: Language (Hindi, English, or Mix)**. Results refresh automatically as you select, and the **🔀 Shuffle** button returns a fresh, equally-relevant set of tracks on demand.
+2. **Find similar** — search a track by name or artist (results are ranked by relevance, not just first-match), click it, and get its nearest neighbours in audio space.
+3. **Top Charts** — a ranked leaderboard of the most popular tracks in the whole collection, no filtering needed.
 
 Every result card shows a mini equalizer of its audio features, its language badge, and a high-quality song banner dynamically retrieved from the iTunes API.
 
@@ -168,7 +168,7 @@ available at **http://localhost:8010/docs** (FastAPI's auto-generated Swagger UI
 | GET    | `/api/search?q=`              | Search tracks by name or artist           |
 | POST   | `/api/recommend`              | Faceted taste-vector recommendations      |
 | GET    | `/api/tracks/{id}/similar`    | Content-based similar tracks              |
-| GET    | `/api/popular?genre=`         | Popularity-ranked browsing                |
+| GET    | `/api/popular?genre=`         | Top Charts — popularity-ranked browsing   |
 
 Example:
 

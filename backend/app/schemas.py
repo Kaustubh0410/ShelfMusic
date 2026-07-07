@@ -47,6 +47,7 @@ class RecommendRequest(BaseModel):
     activities: list[str] = Field(default_factory=list)
     language: str = Field("mix", description="Filter by language: hindi, english, or mix")
     limit: int = Field(24, ge=1, le=100)
+    shuffle: bool = Field(False, description="Return a varied random sample of strong matches")
 
 
 class RecommendResponse(BaseModel):

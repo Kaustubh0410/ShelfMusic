@@ -96,6 +96,7 @@ def recommend(req: RecommendRequest) -> RecommendResponse:
         activities=req.activities,
         language=req.language,
         limit=req.limit,
+        shuffle=req.shuffle,
     )
     return RecommendResponse(
         strategy="faceted_taste_vector",

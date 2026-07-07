@@ -141,16 +141,16 @@ class MusicRecommender:
 
         name_l = self.df["track_name"].str.lower()
         artist_l = self.df["artist_name"].str.lower()
-
-        name_match = name_l.str.contains(q, regex=False, na=False)
-        artist_match = artist_l.str.contains(q, regex=False, na=False)
-        mask = name_match | artist_match
+        mask = (
+            name_l.str.contains(q, regex=False, na=False)
+            | artist_l.str.contains(q, regex=False, na=False)
+        )
         if not mask.any():
             return []
 
         hits = self.df[mask].copy()
         # Relevance score: title starts-with (3) > title contains (2) >
-        # artist starts-with (1.5) > artist contains (1); break ties by popularity.
+        # artist starts-with (1.5) > artist contains (1); tie-break by popularity.
         hq = hits["track_name"].str.lower()
         aq = hits["artist_name"].str.lower()
         score = (
@@ -177,6 +177,7 @@ class MusicRecommender:
         language: str = "mix",
         limit: int = 24,
         popularity_weight: float = 0.15,
+        shuffle: bool = False,
     ) -> list[dict]:
         candidates = self._apply_filters(genres, moods, artists, activities, language)
         if len(candidates) == 0:
@@ -221,7 +222,17 @@ class MusicRecommender:
         pop = self.df.iloc[candidates]["popularity"].to_numpy() / 100.0
         blended = (1 - popularity_weight) * sims + popularity_weight * pop
 
-        order = np.argsort(blended)[::-1][:limit]
+        ranked = np.argsort(blended)[::-1]
+        if shuffle:
+            # Take a wider pool of strong matches and randomly sample from it,
+            # so each shuffle returns different-but-relevant tracks.
+            pool_size = min(len(ranked), max(limit * 3, limit + 20))
+            pool = ranked[:pool_size]
+            rng = np.random.default_rng()
+            chosen = rng.choice(pool, size=min(limit, len(pool)), replace=False)
+            order = chosen
+        else:
+            order = ranked[:limit]
         top_positions = candidates[order]
         scores = {int(candidates[o]): float(blended[o]) for o in order}
         return self._rows_to_records([int(p) for p in top_positions], scores)

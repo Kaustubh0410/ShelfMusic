@@ -38,14 +38,11 @@ Start from a track you already like.
 You can also hit **"more like this →"** on any result card to pivot to that
 track's neighbours.
 
-## 3. Popular
+## 3. Top Charts
 
-Browse without any input.
-
-- Tap **all** for the most popular tracks overall, or
-- Tap a **genre** chip for the most popular tracks in that genre.
-
-This is the browse-by-popularity view.
+No input needed — just a ranked leaderboard of the most popular tracks across
+the whole collection, numbered #1, #2, #3… This is the place to see what's
+trending overall without filtering by anything.
 
 ## Reading a result card
 
@@ -62,6 +59,7 @@ This is the browse-by-popularity view.
 ## Tips
 
 - Combine mood, genre, activity, and language for the most targeted results.
+- Don't like the current picks? Hit **🔀 Shuffle** for a different set of tracks that still match your filters.
 - Match scores are relative within a result set, not absolute quality ratings.
 - The API is open at **http://localhost:8010/docs** if you want to call it
   directly.

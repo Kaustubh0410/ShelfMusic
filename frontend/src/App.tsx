@@ -125,10 +125,10 @@ export default function App() {
     }
   }, [moods, genres, activities, language, mode]);
 
-  async function runRecommend() {
+  async function runRecommend(shuffle = false) {
     setLoading(true);
     setError(null);
-    setHeading("Tuned to your taste");
+    setHeading(shuffle ? "Shuffled for you" : "Tuned to your taste");
     try {
       const payload: RecommendPayload = {
         genres,
@@ -137,6 +137,7 @@ export default function App() {
         activities,
         language,
         limit: 24,
+        shuffle,
       };
       const r = await api.recommend(payload);
       setResults(r.results);
@@ -337,8 +338,8 @@ export default function App() {
           </div>
 
           <div className="btn-row" style={{ marginTop: 32 }}>
-            <button className="btn" onClick={runRecommend} disabled={loading}>
-              {loading ? "Mixing…" : "Refresh recommendations"}
+            <button className="btn" onClick={() => runRecommend(true)} disabled={loading}>
+              {loading ? "Shuffling…" : "🔀 Shuffle"}
             </button>
             {loading && <Spinner />}
           </div>

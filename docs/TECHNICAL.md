@@ -83,6 +83,24 @@ The backend still accepts an optional `preferences` object (from an earlier
 slider-based UI) for backward compatibility, but the current card UI drives the
 dynamic path above.
 
+### Search ranking (`/api/search`)
+
+Search matches on substring in either the track name or artist name, then
+ranks hits by relevance rather than dataset order: title-starts-with (3) >
+title-contains (2) > artist-starts-with (1.5) > artist-contains (1), with
+popularity as a tiebreaker. This keeps a query like "sabrina" surfacing
+Sabrina Carpenter first instead of an unrelated track that happens to contain
+the substring somewhere in a long collaboration credit.
+
+### Shuffle
+
+The taste tab's Shuffle button re-requests `/api/recommend` with `shuffle=true`.
+Instead of deterministically returning the top-N by blended score, the engine
+takes a wider pool of strong matches (top `3×limit`) and randomly samples
+`limit` tracks from it — so results stay relevant to the current filters but
+vary between presses. Non-shuffle requests (e.g. the auto-refresh on filter
+change) remain fully deterministic.
+
 ### Language classification (data prep)
 
 The Kaggle dataset has no language field, so `data/prepare_dataset.py` classifies
@@ -93,9 +111,12 @@ surnames avoids false positives such as "Luke Sital-Singh"). This is a heuristic
 the dataset is predominantly Western, so the honest Hindi count is small, and the
 classifier is tuned to avoid false positives rather than maximise recall.
 
-### 3. Popularity browsing (`/api/popular`)
+### 3. Top Charts (`/api/popular`)
 
-Simple `ORDER BY popularity DESC`, optionally filtered by genre.
+The Top Charts tab renders this as a ranked leaderboard: results are sorted by
+`popularity DESC` and displayed with a rank badge (#1, #2, #3…). No genre
+filtering — that's already covered by the taste tab, so Top Charts stays a
+single, simple "what's popular overall" view rather than duplicating it.
 
 ## Backend structure
 

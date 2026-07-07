@@ -57,6 +57,7 @@ export interface RecommendPayload {
   activities: string[];
   language: string;
   limit: number;
+  shuffle?: boolean;
 }
 
 const BASE = "/api";
