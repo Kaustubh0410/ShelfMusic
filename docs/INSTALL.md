@@ -4,7 +4,7 @@
 
 - **Docker** (20.10+) and **Docker Compose** (v2 `docker compose` or v1 `docker-compose`).
 - ~1 GB free disk for images.
-- Ports **8080**, **8000**, and **5432** free on your host.
+- Ports **3000**, **8010**, and **5432** free on your host.
 
 Verify Docker:
 
@@ -48,7 +48,7 @@ What happens on first boot:
 
 1. **db** starts and becomes healthy (`pg_isready`).
 2. **backend** waits for the DB, creates the `tracks` table, seeds it from
-   `data/dataset.csv` (480 tracks), and fits the recommender.
+   `data/dataset.csv` (~16,000 tracks), and fits the recommender.
 3. **frontend** serves the built SPA and proxies `/api` to the backend.
 
 When you see `Application startup complete`, open:

@@ -58,37 +58,53 @@ top = argsort(sims)[::-1][:N]
 
 Returns the N most similar tracks with their cosine scores as `match_score`.
 
-### 2. Preference taste vector (`/api/recommend`)
+### 2. Faceted taste vector (`/api/recommend`)
 
-The user's slider values overwrite the corresponding features of a synthetic
-"mean track"; tempo/loudness stay at dataset means (the UI only steers 0–1
-features). Preferred genres form the genre component:
+The user's card selections (moods, genres, activities, language) first **filter**
+the catalogue to the matching tracks. Instead of reading slider values, the
+taste vector is built **dynamically** from the average audio features of those
+matching tracks, combined with a TF-IDF tag vector of the chosen genres/moods:
 
 ```
-target_vec  = scale(mean_track overwritten by slider values)
-genre_vec   = TFIDF(" ".join(preferred_genres)) * 1.5
-taste       = [ target_vec | genre_vec ]
+candidates  = filter(tracks, moods, genres, activities, language)
+target_vec  = scale(mean audio features of candidates)
+tag_vec     = TFIDF(" ".join(selected genres + moods)) * 1.5
+taste       = [ target_vec | tag_vec ]
 
-sims        = cosine_similarity(taste, feature_matrix)
+sims        = cosine_similarity(taste, candidate_matrix)
 blended     = (1 - w) * sims + w * (popularity/100)   # w = 0.15
-blended    += 0.05 for tracks whose genre is preferred # soft boost
 ```
 
-Blending popularity handles cold-start / vague queries; the soft genre boost
-nudges (rather than hard-filters) toward chosen genres.
+If a filter combination matches nothing, the engine relaxes the mood/genre/
+activity filters (keeping language) so the user still gets sensible results
+rather than an empty screen.
 
-### 3. Popularity fallback (`/api/popular`)
+The backend still accepts an optional `preferences` object (from an earlier
+slider-based UI) for backward compatibility, but the current card UI drives the
+dynamic path above.
+
+### Language classification (data prep)
+
+The Kaggle dataset has no language field, so `data/prepare_dataset.py` classifies
+each track as **hindi** or **english** using two signals: (1) genuine Indian
+genre tags (filmi, ghazal, sufi, indipop, ...), and (2) a set of known Indian
+artist names matched on the **full** name (matching full names rather than bare
+surnames avoids false positives such as "Luke Sital-Singh"). This is a heuristic:
+the dataset is predominantly Western, so the honest Hindi count is small, and the
+classifier is tuned to avoid false positives rather than maximise recall.
+
+### 3. Popularity browsing (`/api/popular`)
 
 Simple `ORDER BY popularity DESC`, optionally filtered by genre.
 
 ## Backend structure
 
 - `app/recommender.py` — `MusicRecommender` class: fit, search, `similar_to`,
-  `recommend_from_preferences`, `popular`. Pure Python/scikit-learn, no web deps.
+  `recommend`, `popular`. Pure Python/scikit-learn, no web deps.
 - `app/database.py` — connection with retry (waits for the DB container),
   schema creation, idempotent seeding, and DataFrame loading via SQLAlchemy.
 - `app/schemas.py` — Pydantic request/response models with validation
-  (e.g. slider values constrained to `[0,1]`).
+  (e.g. `language` and `limit` bounds on the recommend request).
 - `app/main.py` — FastAPI routes + a `lifespan` handler that initializes the DB
   and fits the recommender before the app serves traffic.
 
@@ -98,6 +114,10 @@ Simple `ORDER BY popularity DESC`, optionally filtered by genre.
 - `src/App.tsx` — three modes (taste / similar / popular), state, debounced
   search.
 - `src/FeatureEqualizer.tsx` — renders each track's audio features as bars.
+- `src/AlbumCover.tsx` — fetches album art from the iTunes Search API at display
+  time, with a generated SVG fallback when a track has no match.
+- `src/TrackModal.tsx` / `src/MultiSelect.tsx` — track detail modal and the
+  multi-select control used by the card flow.
 - nginx (`nginx.conf`) serves the built SPA and reverse-proxies `/api` to the
   backend, so the browser uses a single origin (clean CORS).
 
@@ -117,7 +137,7 @@ other by name (`db`, `backend`) via Docker's internal DNS.
 ## Extending
 
 - **Collaborative filtering:** add a `ratings` table and matrix factorization,
-  then blend its scores into `recommend_from_preferences`.
+  then blend its scores into `recommend`.
 - **Larger data:** for big datasets, replace the precomputed similarity matrix
   with an approximate-nearest-neighbour index (e.g. FAISS/Annoy).
 - **Real audio features:** swap `data/dataset.csv` for the Kaggle export.

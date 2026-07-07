@@ -80,7 +80,12 @@ class MusicRecommender:
         out = []
         for i in idx:
             row = self.df.iloc[i]
-            acts = [a for a in str(row["activities"]).split(",") if a]
+            _raw_acts = str(row["activities"]).strip()
+            acts = (
+                []
+                if _raw_acts.lower() in ("", "none", "nan")
+                else [a for a in _raw_acts.split(",") if a and a.lower() not in ("none", "nan")]
+            )
             rec = {
                 "track_id": row["track_id"],
                 "track_name": row["track_name"],
@@ -133,11 +138,30 @@ class MusicRecommender:
         q = query.strip().lower()
         if not q:
             return []
-        mask = (
-            self.df["track_name"].str.lower().str.contains(q, regex=False, na=False)
-            | self.df["artist_name"].str.lower().str.contains(q, regex=False, na=False)
+
+        name_l = self.df["track_name"].str.lower()
+        artist_l = self.df["artist_name"].str.lower()
+
+        name_match = name_l.str.contains(q, regex=False, na=False)
+        artist_match = artist_l.str.contains(q, regex=False, na=False)
+        mask = name_match | artist_match
+        if not mask.any():
+            return []
+
+        hits = self.df[mask].copy()
+        # Relevance score: title starts-with (3) > title contains (2) >
+        # artist starts-with (1.5) > artist contains (1); break ties by popularity.
+        hq = hits["track_name"].str.lower()
+        aq = hits["artist_name"].str.lower()
+        score = (
+            hq.str.startswith(q).astype(float) * 3.0
+            + hq.str.contains(q, regex=False, na=False).astype(float) * 2.0
+            + aq.str.startswith(q).astype(float) * 1.5
+            + aq.str.contains(q, regex=False, na=False).astype(float) * 1.0
+            + hits["popularity"].astype(float) / 1000.0
         )
-        idx = self.df.index[mask][:limit].tolist()
+        hits = hits.assign(_score=score).sort_values("_score", ascending=False)
+        idx = hits.index[:limit].tolist()
         return self._rows_to_records(idx)
 
     # ------------------------------------------------------------------ #

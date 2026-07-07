@@ -82,9 +82,6 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Track[]>([]);
 
-  // Popular states
-  const [selectedPopularGenre, setSelectedPopularGenre] = useState<string | null>(null);
-
   const [results, setResults] = useState<Track[]>([]);
   const [strategy, setStrategy] = useState("");
   const [loading, setLoading] = useState(false);
@@ -114,12 +111,12 @@ export default function App() {
     return () => clearTimeout(delayDebounce);
   }, [searchQuery]);
 
-  // Load popular tracks when switching to popular tab or changing popular genre
+  // Load the Top Charts when switching to the popular tab
   useEffect(() => {
     if (mode === "popular") {
-      runPopular(selectedPopularGenre || undefined);
+      runPopular();
     }
-  }, [mode, selectedPopularGenre]);
+  }, [mode]);
 
   // Auto-run recommendations when taste filters change
   useEffect(() => {
@@ -168,12 +165,12 @@ export default function App() {
     }
   }
 
-  async function runPopular(genre?: string) {
+  async function runPopular() {
     setLoading(true);
     setError(null);
-    setHeading(genre ? `Popular in ${genre}` : "Popular overall");
+    setHeading("Top Charts");
     try {
-      const r = await api.popular(genre);
+      const r = await api.popular();
       setResults(r.results);
       setStrategy(r.strategy);
     } catch (e) {
@@ -237,7 +234,7 @@ export default function App() {
           aria-selected={mode === "popular"}
           onClick={() => handleTabChange("popular")}
         >
-          Popular
+          Top Charts
         </button>
       </div>
 
@@ -386,30 +383,9 @@ export default function App() {
       )}
 
       {mode === "popular" && (
-        <section className="panel">
-          <h2>Popular tracks</h2>
-          <p className="hint">Explore the most popular tracks overall or by genre.</p>
-          {facets && (
-            <div className="chips">
-              <button
-                className="chip"
-                aria-pressed={selectedPopularGenre === null}
-                onClick={() => setSelectedPopularGenre(null)}
-              >
-                All
-              </button>
-              {facets.genres.map((g) => (
-                <button
-                  key={g}
-                  className="chip"
-                  aria-pressed={selectedPopularGenre === g}
-                  onClick={() => setSelectedPopularGenre(g)}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-          )}
+        <section className="panel charts-intro">
+          <h2>🔥 Top Charts</h2>
+          <p className="hint">The most popular tracks across the whole collection, ranked by popularity.</p>
         </section>
       )}
 
@@ -431,8 +407,8 @@ export default function App() {
               Try changing your steps or selections.
             </div>
           ) : (
-            <div className="grid">
-              {results.map((t) => (
+            <div className={mode === "popular" ? "grid chart-grid" : "grid"}>
+              {results.map((t, i) => (
                 <div
                   className="card"
                   key={t.track_id}
@@ -445,6 +421,7 @@ export default function App() {
                     }
                   }}
                 >
+                  {mode === "popular" && <span className="chart-rank">#{i + 1}</span>}
                   <AlbumCover track={t} size={240} />
                   <div className="card-body">
                     <div className="row">

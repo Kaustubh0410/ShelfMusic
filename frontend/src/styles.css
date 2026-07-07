@@ -588,3 +588,67 @@ footer.foot {
   border-bottom: 1px solid var(--line);
 }
 
+/* ============ Top Charts (ranked list) ============ */
+.charts-intro h2 {
+  font-size: 22px;
+}
+
+/* Each chart card carries a rank badge in the top-left corner */
+.card {
+  position: relative;
+}
+.chart-rank {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(11, 13, 20, 0.82);
+  color: var(--warm);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--line);
+}
+/* Give the top 3 a highlight */
+.chart-grid .card:nth-child(1) .chart-rank { color: #ffd23f; border-color: #ffd23f; }
+.chart-grid .card:nth-child(2) .chart-rank { color: #d7d7e0; border-color: #d7d7e0; }
+.chart-grid .card:nth-child(3) .chart-rank { color: #e0a066; border-color: #e0a066; }
+
+/* ============ Truncate long artist lists (overflow fix) ============ */
+/* Some tracks have 20+ comma-separated artists; clamp them so cards and
+   search results keep a consistent height. */
+.card .artist {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 2.8em;
+  line-height: 1.4;
+}
+
+.search-item > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+.search-item strong {
+  display: block;
+}
+.search-item {
+  align-items: flex-start;
+}
+/* Clamp the artist text inside a search suggestion to one line */
+.search-item > div:first-child {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

@@ -1,16 +1,16 @@
 # 🎧 ShelfMusic — a hybrid music recommender
 
 ShelfMusic recommends songs by **listening to the audio, not the hype**. You
-either tune a set of sliders that describe how you want to feel (energy, mood,
-danceability, acoustic-ness) or pick a track you already love, and the engine
-finds the closest matches in audio-feature space.
+pick how you want to feel through a simple card-based flow — mood, genre,
+activity, and language (Hindi, English, or a mix) — or pick a track you already
+love, and the engine finds the closest matches in audio-feature space.
 
 It is a fully containerized, plug-and-play project: one command brings up a
 React frontend, a FastAPI backend, and a PostgreSQL database, each in its own
 container on a shared Docker network.
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 Then open **http://localhost:3000**.
@@ -46,25 +46,31 @@ learning core, a separated API, a database, and a real UI.
 
 ## What makes it unique
 
-- **Two complementary recommendation modes in one app.** A *content-based*
-  item-to-item engine ("more like this track") **and** a *preference-driven*
-  taste-vector engine ("build me something that feels like this"). Most demo
-  recommenders ship only one.
+- **Three recommendation modes in one app.** A *content-based* item-to-item
+  engine ("more like this track"), a *faceted taste-vector* engine that builds a
+  profile from your mood / genre / activity / language choices, and a
+  *popularity* browser.
 - **Audio features are the interface.** The signature UI element is a live
   **equalizer**: every result card renders its danceability / energy / mood /
   acousticness as spectrum bars, so you can *see* why a track was matched.
 - **Genre similarity is folded into the vector space via TF-IDF**, so
   recommendations balance "same genre" against "similar sound" instead of
   hard-filtering by genre.
-- **Truly plug-and-play.** A synthesized, genre-consistent dataset ships in the
-  repo, so `docker-compose up` works with zero external downloads or API keys.
-  Swap in the real Kaggle CSV any time (see [Data source](#data-source)).
+- **Hindi / English language filter.** Tracks are classified by language using
+  Indian-artist and Indian-genre matching, so you can ask for Bollywood / Hindi,
+  English / international, or a blend.
+- **Real album art.** Result cards fetch high-quality song banners from the
+  iTunes Search API at display time, with a generated fallback cover when a
+  track has no match.
+- **Truly plug-and-play.** A ready-to-use sample of the real Kaggle dataset
+  ships in the repo, so `docker compose up` works out of the box. Regenerate or
+  resample it any time (see [Data source](#data-source)).
 
 ## Architecture
 
 ```
                          ┌─────────────────────────────────────────┐
-   Browser  ──http──▶    │  frontend (nginx + React/TS SPA) :8080   │
+   Browser  ──http──▶    │  frontend (nginx + React/TS SPA) :3000   │
                          │   • serves the built SPA                 │
                          │   • proxies /api ──▶ backend             │
                          └───────────────┬─────────────────────────┘
@@ -153,25 +159,24 @@ Every result card shows a mini equalizer of its audio features, its language bad
 ## API reference
 
 Base URL (inside the app): `/api` — proxied to the backend. Interactive docs are
-available at **http://localhost:8000/docs** (FastAPI's auto-generated Swagger UI).
+available at **http://localhost:8010/docs** (FastAPI's auto-generated Swagger UI).
 
 | Method | Path                          | Purpose                                   |
 |--------|-------------------------------|-------------------------------------------|
 | GET    | `/api/health`                 | Liveness probe                            |
-| GET    | `/api/meta`                   | Track count + available genres            |
-| GET    | `/api/search?q=`              | Search tracks by name/artist              |
+| GET    | `/api/facets`                 | Genres, moods, artists, activities for UI |
+| GET    | `/api/search?q=`              | Search tracks by name or artist           |
+| POST   | `/api/recommend`              | Faceted taste-vector recommendations      |
 | GET    | `/api/tracks/{id}/similar`    | Content-based similar tracks              |
-| POST   | `/api/recommend`              | Preference/taste-vector recommendations   |
-| GET    | `/api/popular?genre=`         | Popularity-ranked fallback                |
+| GET    | `/api/popular?genre=`         | Popularity-ranked browsing                |
 
 Example:
 
 ```bash
-curl -X POST http://localhost:8000/api/recommend \
+curl -X POST http://localhost:8010/api/recommend \
   -H "Content-Type: application/json" \
-  -d '{"preferences":{"energy":0.9,"danceability":0.6,"valence":0.4,
-       "acousticness":0.05,"instrumentalness":0.3},
-       "genres":["metal","electronic"],"limit":5}'
+  -d '{"moods":["joy"],"genres":["rock"],
+       "activities":["party"],"language":"english","limit":12}'
 ```
 
 ## How the recommender works
@@ -184,9 +189,10 @@ without overwhelming the audio signal).
 
 - **Similar tracks:** cosine similarity between the seed track's vector and every
   other track; return the top-N (excluding the seed).
-- **Preference recommendations:** build a synthetic *taste vector* from the
-  slider values + preferred genres, cosine-rank all tracks against it, and blend
-  in normalized popularity so cold-start queries still surface known tracks.
+- **Faceted recommendations:** filter tracks by the chosen mood / genre /
+  activity / language, build a *taste vector* from the average audio features of
+  the matching tracks plus a TF-IDF tag vector, cosine-rank against it, and blend
+  in normalized popularity so results stay meaningful.
 
 ## Project layout
 
@@ -196,8 +202,8 @@ shelfmusic/
 ├── README.md
 ├── .env.example
 ├── data/
-│   ├── dataset.csv            # seed data (generated; Kaggle-compatible schema)
-│   └── prepare_dataset.py    # regenerates dataset.csv
+│   ├── dataset.csv            # seed data (sampled from the Kaggle dataset)
+│   └── prepare_dataset.py     # cleans + samples the raw Kaggle CSV
 ├── backend/
 │   ├── Dockerfile
 │   ├── requirements.txt
@@ -213,7 +219,10 @@ shelfmusic/
 │   ├── nginx.conf             # serves SPA, proxies /api
 │   ├── package.json
 │   └── src/
-│       ├── App.tsx            # UI + modes
+│       ├── App.tsx            # UI + the three modes
+│       ├── AlbumCover.tsx     # iTunes cover fetch + generated fallback
+│       ├── TrackModal.tsx     # track detail modal
+│       ├── MultiSelect.tsx    # multi-select dropdown control
 │       ├── FeatureEqualizer.tsx
 │       ├── api.ts             # typed API client
 │       └── styles.css
@@ -235,19 +244,20 @@ pytest
 
 ## Implementation process
 
-1. **Data** — defined a Kaggle-compatible schema and a generator that produces
-   genre-consistent audio features, so the project is reproducible and needs no
-   API keys.
-2. **Recommender** — built and validated the content-based + preference engines
-   in isolation with unit tests.
+1. **Data** — took the real Kaggle "900K Spotify" dataset and wrote a prep
+   script that cleans the raw fields, classifies each track's language, and
+   samples it down to a compact, committable `dataset.csv`.
+2. **Recommender** — built and validated the content-based and faceted
+   taste-vector engines in isolation with unit tests.
 3. **Database** — added an idempotent PostgreSQL layer that seeds on first run.
 4. **API** — wrapped the engine in FastAPI with typed request/response models
    and a startup lifespan that fits the model once.
-5. **Frontend** — built a React/TypeScript SPA with the equalizer motif and the
-   three recommendation modes, talking to the API through a typed client.
+5. **Frontend** — built a React/TypeScript SPA with a card-based flow, the
+   equalizer motif, album covers, and the three recommendation modes, talking to
+   the API through a typed client.
 6. **Containers** — Dockerized each service and wired them together on a custom
    network with health checks and first-run seeding.
 
 ---
 
-*ShelfMusic — training project. Data: Spotify-style audio features (see above).*
+*ShelfMusic — training project. Data: Kaggle "900K Spotify" dataset (see above).*
