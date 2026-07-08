@@ -22,12 +22,11 @@ cd shelfmusic
 
 ## 2. (Optional) configure
 
-Defaults work out of the box. To override credentials or ports, copy the
-example env file and edit it — Docker Compose picks it up automatically:
-
-```bash
-cp .env.example .env
-```
+Defaults work out of the box. `.env.example` documents the variables the
+backend reads (see the table below), but `docker-compose.yml` currently sets
+them as fixed values rather than reading from a `.env` file — so to actually
+change credentials or the dataset path, edit the `environment:` blocks in
+`docker-compose.yml` directly rather than creating a `.env` file.
 
 | Variable            | Default      | Meaning                          |
 |---------------------|--------------|----------------------------------|
@@ -85,7 +84,7 @@ docker-compose down -v && docker-compose up --build
 ## Troubleshooting
 
 - **Port already in use** — edit the `ports:` mappings in `docker-compose.yml`
-  (e.g. change `3000:80` to `3000:80`).
+  (e.g. change `3000:80` to `3001:80` if 3000 is taken by another app).
 - **Backend can't reach the DB** — the backend retries for ~60s on startup;
   if it still fails, run `docker-compose down -v` and try again.
 - **Stale data after swapping the CSV** — the table only seeds when empty, so

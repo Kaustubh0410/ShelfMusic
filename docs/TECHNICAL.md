@@ -44,8 +44,12 @@ For each track we build a vector by concatenating:
 feature_matrix = [ MinMaxScaled(numeric) | TFIDF(genre) * 1.5 ]
 ```
 
-Because the dataset is small, the full **track×track cosine similarity matrix**
-is precomputed once at fit time for instant item-item lookups.
+Similarity is **not** precomputed as a full track×track matrix — for 16,000+
+tracks that would be a large, mostly-wasted matrix, since most requests only
+need one row of it. Instead, `similar_to()` computes cosine similarity
+on-demand between a single seed track's vector and every other track
+(`cosine_similarity(seed_vector, feature_matrix)`), which keeps memory flat
+and is still fast enough for interactive use at this dataset size.
 
 ## Recommendation strategies
 
@@ -148,8 +152,10 @@ single, simple "what's popular overall" view rather than duplicating it.
 - `src/FeatureEqualizer.tsx` — renders each track's audio features as bars.
 - `src/AlbumCover.tsx` — fetches album art from the iTunes Search API at display
   time, with a generated SVG fallback when a track has no match.
-- `src/TrackModal.tsx` / `src/MultiSelect.tsx` — track detail modal and the
-  multi-select control used by the card flow.
+- `src/TrackModal.tsx` — the track detail modal.
+- `src/MultiSelect.tsx` — a multi-select dropdown built during an earlier
+  design iteration; superseded by the card grids in `App.tsx` and not
+  currently imported. Kept in the tree rather than deleted.
 - nginx (`nginx.conf`) serves the built SPA and reverse-proxies `/api` to the
   backend, so the browser uses a single origin (clean CORS).
 

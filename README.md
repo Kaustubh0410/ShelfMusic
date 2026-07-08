@@ -31,6 +31,7 @@ Then open **http://localhost:3000**.
 - [Project layout](#project-layout)
 - [Running tests](#running-tests)
 - [Implementation process](#implementation-process)
+- [Declarations](#declarations)
 
 ---
 
@@ -113,6 +114,10 @@ Each track includes metadata (artist, song, album, genre, release date),
 an **emotion/mood** label, nine **"good for" activity** flags (party,
 work/study, exercise, driving, ...), and audio features (energy,
 danceability, positiveness/valence, acousticness, tempo, loudness, etc.).
+
+Album art is fetched live from the **iTunes Search API**
+(https://itunes.apple.com/search) at display time, with a generated SVG
+fallback for tracks it can't find or when the request is rate-limited.
 
 **Preparing the data (required once).** The raw file is ~1.1 GB / ~900K
 rows — far too large to load into memory or commit to Git. `data/prepare_dataset.py`
@@ -257,6 +262,15 @@ pytest
    the API through a typed client.
 6. **Containers** — Dockerized each service and wired them together on a custom
    network with health checks and first-run seeding.
+
+---
+
+<<<<<<< HEAD
+## Declarations
+
+- **Data**: track metadata and audio features from the Kaggle **"900K Spotify"** dataset by *devdope* (see [Data source](#data-source)), downloaded and prepared locally — no proprietary or scraped data.
+- **Album art**: fetched live from the public **iTunes Search API**; no API key required, no data stored beyond an in-memory session cache.
+- **Code**: written for this project, with AI coding assistance used during development (permitted per the project brief). No third-party templates, starter kits, or other candidates' code were used.
 
 ---
 
