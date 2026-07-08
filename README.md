@@ -137,7 +137,7 @@ See **[docs/INSTALL.md](docs/INSTALL.md)** for the full guide. The short version
 **Prerequisites:** Docker and Docker Compose.
 
 ```bash
-git clone <your-public-repo-url> shelfmusic
+git clone https://github.com/Kaustubh0410/ShelfMusic.git shelfmusic
 cd shelfmusic
 docker-compose up --build
 ```
