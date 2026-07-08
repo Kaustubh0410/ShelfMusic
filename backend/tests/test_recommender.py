@@ -26,11 +26,18 @@ def test_search(rec):
 
 
 def test_recommend_respects_genre_filter(rec):
-    g = rec.df["genre"].iloc[0]
+    # Genres are stored as comma-separated multi-tag strings (e.g.
+    # "rock,pop,indie rock"), so we pick ONE clean tag that actually occurs
+    # standalone in the data, and assert it's present among each result's
+    # tags rather than requiring an exact full-string match (which would
+    # only ever match tracks with that exact single tag and nothing else).
+    single_tag_genres = rec.df["genre"][~rec.df["genre"].str.contains(",", na=False)]
+    g = single_tag_genres.iloc[0]
     recs = rec.recommend(
         preferences=dict(danceability=0.5, energy=0.5, valence=0.5, acousticness=0.5, instrumentalness=0.2),
         genres=[g], limit=8)
-    assert all(t["genre"] == g for t in recs)
+    assert len(recs) > 0
+    assert all(g in [t.strip() for t in rec_track["genre"].split(",")] for rec_track in recs)
 
 
 def test_recommend_respects_mood_filter(rec):

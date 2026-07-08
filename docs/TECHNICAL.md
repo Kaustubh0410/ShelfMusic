@@ -15,12 +15,13 @@ The `tracks` table (seeded from `data/dataset.csv`):
 | track_id           | TEXT PK | stable id                               |
 | track_name         | TEXT    |                                         |
 | artist_name        | TEXT    |                                         |
-| genre              | TEXT    | one of 12 genres                        |
-| popularity         | INT     | 1–100                                   |
-| duration_ms        | INT     |                                         |
+| genre              | TEXT    | comma-separated tags, e.g. "rock,pop"; ~3,100 distinct strings, ~47% of rows have more than one tag |
+| language           | TEXT    | "hindi" or "english" (see classification below) |
+| popularity         | INT     | 0–98                                    |
+| duration_sec       | INT     |                                         |
 | danceability       | FLOAT   | 0–1                                     |
 | energy             | FLOAT   | 0–1                                     |
-| valence            | FLOAT   | 0–1 (musical positivity)                |
+| valence             | FLOAT   | 0–1 (musical positivity)                |
 | acousticness       | FLOAT   | 0–1                                     |
 | instrumentalness   | FLOAT   | 0–1                                     |
 | speechiness        | FLOAT   | 0–1                                     |
@@ -91,6 +92,16 @@ title-contains (2) > artist-starts-with (1.5) > artist-contains (1), with
 popularity as a tiebreaker. This keeps a query like "sabrina" surfacing
 Sabrina Carpenter first instead of an unrelated track that happens to contain
 the substring somewhere in a long collaboration credit.
+
+### Genre matching
+
+Genres are stored as comma-separated multi-tag strings (e.g. `"rock,pop,indie
+rock"`) rather than a single clean label — about 47% of rows have more than
+one tag. Filtering therefore checks whether a selected genre appears as **any**
+one of a track's comma-separated tags, not whether the whole genre field
+equals the selection exactly. An exact-match approach would silently miss the
+majority of multi-tagged tracks (e.g. only ~100 of the ~2,600 tracks genuinely
+tagged "rock" have *just* "rock" as their only tag).
 
 ### Shuffle
 

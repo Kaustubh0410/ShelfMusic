@@ -9,7 +9,7 @@ This document summarizes all modifications made to the **ShelfMusic** recommenda
 | Component | File Path | Type | Key Changes |
 | :--- | :--- | :--- | :--- |
 | **Data** | [data/prepare_dataset.py](file:///d:/shelfmusic-v2/shelfmusic/data/prepare_dataset.py) | `MODIFY` | Classify tracks as Hindi/English; sample all Hindi tracks + 18k English tracks. |
-| **Data** | [data/dataset.csv](file:///d:/shelfmusic-v2/shelfmusic/data/dataset.csv) | `MODIFY` | Re-generated dataset containing **28,961 tracks** (10,291 Hindi + 18,670 English). |
+| **Data** | [data/dataset.csv](file:///d:/shelfmusic-v2/shelfmusic/data/dataset.csv) | `MODIFY` | Re-generated dataset containing **16,053 tracks** (178 Hindi + 15,875 English — honest counts after fixing false-positive language matching; see Technical docs). |
 | **Backend** | [backend/app/database.py](file:///d:/shelfmusic-v2/shelfmusic/backend/app/database.py) | `MODIFY` | Added `language` column to PostgreSQL schema and seeding scripts. |
 | **Backend** | [backend/app/schemas.py](file:///d:/shelfmusic-v2/shelfmusic/backend/app/schemas.py) | `MODIFY` | Added `language` to Pydantic models; increased recommendation limit to 24. |
 | **Backend** | [backend/app/recommender.py](file:///d:/shelfmusic-v2/shelfmusic/backend/app/recommender.py) | `MODIFY` | Added language filtering; calculates taste vectors dynamically from selected cards. |
@@ -25,7 +25,7 @@ This document summarizes all modifications made to the **ShelfMusic** recommenda
 
 ### 1. Data Pipeline & Blended Dataset
 - **Classification Rules**: Checks if `Artist(s)` matches popular Indian artists (e.g. Arijit Singh, Lata Mangeshkar, Kishore Kumar, A.R. Rahman, Pritam, Shreya Ghoshal) or if the genre matches Indian/Hindi tags (`filmi`, `sufi`, `indipop`, `ghazal`, etc.) to mark them as `language = 'hindi'`, setting others to `'english'`.
-- **Stratified Sampling**: Keeps all **10,291 Hindi tracks** and samples **18,670 English tracks** to form a balanced mix of **28,961 tracks** (replaced the original 180 mock tracks).
+- **Stratified Sampling**: Keeps all genuinely-classified Hindi tracks and samples English tracks to form **16,053 tracks** total (replaced the original 180 mock tracks). The Hindi count (178) reflects strict full-artist-name matching after an earlier looser version produced false positives.
 
 ### 2. Backend & Similarity Logic
 - **Database updates**: Modified schema `language TEXT` to store the classification.

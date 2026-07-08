@@ -55,6 +55,23 @@ class MusicRecommender:
         self._id_to_pos = {tid: i for i, tid in enumerate(self.df["track_id"])}
 
     # ------------------------------------------------------------------ #
+    # Genre matching helper
+    # ------------------------------------------------------------------ #
+    def _genre_matches(self, wanted: list[str]) -> np.ndarray:
+        """
+        Tracks are tagged with comma-separated genre strings like
+        "rock,pop,indie rock" (~47% of rows have more than one tag). A plain
+        `== "rock"` exact match only catches rows whose entire tag string is
+        literally "rock", silently missing every multi-tagged track. This
+        checks whether any wanted genre appears as one of the comma-separated
+        tokens instead.
+        """
+        wanted_set = {g.lower().strip() for g in wanted}
+        return self.df["genre"].apply(
+            lambda g: bool(wanted_set & {t.strip() for t in str(g).split(",")})
+        ).to_numpy()
+
+    # ------------------------------------------------------------------ #
     # Facet metadata for the UI dropdowns
     # ------------------------------------------------------------------ #
     def facets(self) -> dict:
@@ -116,7 +133,7 @@ class MusicRecommender:
     def _apply_filters(self, genres, moods, artists, activities, language: str = "mix") -> np.ndarray:
         mask = np.ones(len(self.df), dtype=bool)
         if genres:
-            mask &= self.df["genre"].isin([g.lower() for g in genres]).to_numpy()
+            mask &= self._genre_matches(genres)
         if moods:
             mask &= self.df["emotion"].isin([m.lower() for m in moods]).to_numpy()
         if artists:
@@ -189,7 +206,7 @@ class MusicRecommender:
         filter_mask = np.zeros(len(self.df), dtype=bool)
         has_any_filter = False
         if genres:
-            filter_mask |= self.df["genre"].isin([g.lower() for g in genres]).to_numpy()
+            filter_mask |= self._genre_matches(genres)
             has_any_filter = True
         if moods:
             filter_mask |= self.df["emotion"].isin([m.lower() for m in moods]).to_numpy()
@@ -258,6 +275,7 @@ class MusicRecommender:
     def popular(self, limit: int = 12, genre: str | None = None) -> list[dict]:
         df = self.df
         if genre:
-            df = df[df["genre"] == genre.lower()]
+            mask = self._genre_matches([genre])
+            df = df[mask]
         idx = df.sort_values("popularity", ascending=False).head(limit).index.tolist()
         return self._rows_to_records(idx)
