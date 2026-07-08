@@ -16,7 +16,7 @@ docker compose version   # or: docker-compose --version
 ## 1. Get the code
 
 ```bash
-git clone <your-public-repo-url> shelfmusic
+git clone https://github.com/Kaustubh0410/ShelfMusic.git shelfmusic
 cd shelfmusic
 ```
 
